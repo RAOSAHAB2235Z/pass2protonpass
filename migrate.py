@@ -9,7 +9,7 @@ from typing import Optional, List
 PASS_STORE="~/.password-store"
 OUTPUT_FILE="~/.proton-migrate/protonpass.csv"
 
-headers = ["name", "url", "email", "username", "password", "note", "totp", "vault"]
+PROTON_HEADERS = ["name", "url", "email", "username", "password", "note", "totp", "vault"]
 
 @dataclass
 class PassContent:
@@ -21,7 +21,6 @@ class PassContent:
     username: Optional[str] = None
     note: Optional[str] = None
     totp: Optional[str] = None
-    vault: Optional[str] = None
 
 def process_pass(entry_name: str, raw_pass_content: str) -> PassContent:
     """
@@ -154,7 +153,8 @@ def read_pass(entry_name):
             capture_output=True,
             text=True,
             env=env,
-            timeout=30  # Add timeout to prevent hanging
+            timeout=30,  # Add timeout to prevent hanging
+            check=False
         )
 
         if result.returncode != 0:
@@ -183,11 +183,13 @@ def write_pass(output_file: str, rows: List[PassContent]):
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         for r in rows:
-            writer.writerow(asdict(r))
+            row_dict = asdict(r)
+            row_dict['vault'] = None  # Add vault field as None
+            writer.writerow(row_dict)
 
 
-def main():
-    """Main function to process all pass entries and create CSV export."""
+def setup_gpg_passphrase():
+    """Setup GPG passphrase from environment or user input."""
     passphrase = os.getenv("GPG_PASSPHRASE")
     if not passphrase:
         passphrase = getpass.getpass("Enter GPG passphrase: ")
@@ -199,21 +201,22 @@ def main():
         else:
             print("GPG passphrase setup failed, you may need to enter it manually")
 
-    # Expand user paths
-    pass_store_path = os.path.expanduser(PASS_STORE)
 
-    print("\n" + "="*50)
-    print("Processing all entries...")
-    print("="*50)
-
-    processed_pass_rows: List[PassContent] = []
+def count_gpg_files(pass_store_path: str) -> int:
+    """Count total GPG files in the pass store."""
     total_files = 0
-    processed_files = 0
-
     for root, _, files in os.walk(pass_store_path):
         for file in files:
             if file.endswith(".gpg"):
                 total_files += 1
+    return total_files
+
+
+def process_all_entries(pass_store_path: str) -> tuple[List[PassContent], int, int]:
+    """Process all password entries and return results."""
+    processed_pass_rows: List[PassContent] = []
+    processed_files = 0
+    total_files = count_gpg_files(pass_store_path)
 
     print(f"Found {total_files} password entries to process")
 
@@ -234,6 +237,21 @@ def main():
                 processed_files += 1
             else:
                 print(f"  Failed to read: {entry_name}")
+
+    return processed_pass_rows, processed_files, total_files
+
+
+def main():
+    """Main function to process all pass entries and create CSV export."""
+    setup_gpg_passphrase()
+
+    pass_store_path = os.path.expanduser(PASS_STORE)
+
+    print("\n" + "="*50)
+    print("Processing all entries...")
+    print("="*50)
+
+    processed_pass_rows, processed_files, total_files = process_all_entries(pass_store_path)
 
     print(f"\nSuccessfully processed {processed_files}/{total_files} entries")
 

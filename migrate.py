@@ -1,3 +1,4 @@
+"""Migration tool to convert Unix pass entries to Proton Pass CSV format."""
 import csv
 import os
 import subprocess
@@ -12,14 +13,15 @@ headers = ["name", "url", "email", "username", "password", "note", "totp", "vaul
 
 @dataclass
 class PassContent:
+    """Data class representing a password entry for Proton Pass import."""
     name: str
-    url: Optional[str]
-    email: Optional[str]
-    username: Optional[str]
     password: str
-    note: Optional[str]
-    totp: Optional[str]
-    vault: Optional[str]
+    url: Optional[str] = None
+    email: Optional[str] = None
+    username: Optional[str] = None
+    note: Optional[str] = None
+    totp: Optional[str] = None
+    vault: Optional[str] = None
 
 def process_pass(entry_name: str, raw_pass_content: str) -> PassContent:
     """
@@ -35,13 +37,7 @@ def process_pass(entry_name: str, raw_pass_content: str) -> PassContent:
     if not raw_pass_content:
         return PassContent(
             name=entry_name,
-            password="",
-            url=None,
-            email=None,
-            username=None,
-            note=None,
-            totp=None,
-            vault=None
+            password=""
         )
 
     lines = raw_pass_content.split('\n')
@@ -78,12 +74,9 @@ def process_pass(entry_name: str, raw_pass_content: str) -> PassContent:
     return PassContent(
         name=entry_name,
         password=password,
-        url=None,  # Empty for now as specified
         email=email,
         username=username,
-        note=note,
-        totp=None,  # Empty for now as specified
-        vault=None  # Empty for now as specified
+        note=note
     )
 
 def setup_gpg_agent_passphrase(passphrase: str):
@@ -124,30 +117,36 @@ def setup_gpg_agent_passphrase(passphrase: str):
                     break
 
             if not preset_passphrase_path:
-                print("Could not find gpg-preset-passphrase. Please ensure GnuPG is properly installed.")
+                print("Could not find gpg-preset-passphrase. "
+                      "Please ensure GnuPG is properly installed.")
                 return False
 
         preset_proc = subprocess.run(
             [preset_passphrase_path, "--preset", encryption_keygrip],
             input=passphrase,
             text=True,
-            capture_output=True
+            capture_output=True,
+            check=False
         )
 
         if preset_proc.returncode != 0:
-            print(f"Failed to preset passphrase for keygrip {encryption_keygrip}: {preset_proc.stderr}")
+            print(f"Failed to preset passphrase for keygrip {encryption_keygrip}: "
+                  f"{preset_proc.stderr}")
             success = False
         else:
             print(f"Successfully preset passphrase for keygrip {encryption_keygrip}")
 
         return success
-    except Exception as e:
+    except subprocess.SubprocessError as e:
         print(f"Failed to setup GPG passphrase: {e}")
         return False
 
 def read_pass(entry_name):
+    """Read a password entry from the pass store."""
     env = os.environ.copy()
-    env["GPG_TTY"] = subprocess.run(["tty"], capture_output=True, text=True, check=False).stdout.strip()
+    env["GPG_TTY"] = subprocess.run(
+        ["tty"], capture_output=True, text=True, check=False
+    ).stdout.strip()
 
     try:
         result = subprocess.run(
@@ -166,11 +165,12 @@ def read_pass(entry_name):
     except subprocess.TimeoutExpired:
         print(f"Timeout reading {entry_name}")
         return None
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         print(f"Exception reading {entry_name}: {e}")
         return None
 
 def write_pass(output_file: str, rows: List[PassContent]):
+    """Write password entries to CSV file for Proton Pass import."""
     # Expand user path and ensure directory exists
     expanded_output_file = os.path.expanduser(output_file)
     output_dir = os.path.dirname(expanded_output_file)
@@ -187,6 +187,7 @@ def write_pass(output_file: str, rows: List[PassContent]):
 
 
 def main():
+    """Main function to process all pass entries and create CSV export."""
     passphrase = os.getenv("GPG_PASSPHRASE")
     if not passphrase:
         passphrase = getpass.getpass("Enter GPG passphrase: ")
@@ -218,19 +219,21 @@ def main():
 
     for root, _, files in os.walk(pass_store_path):
         for file in files:
-            if file.endswith(".gpg"):
-                path = os.path.join(root, file)
-                entry_name = os.path.relpath(path, pass_store_path)[:-4]
+            if not file.endswith(".gpg"):
+                continue
 
-                print(f"Processing: {entry_name}")
-                raw_pass_content = read_pass(entry_name)
+            path = os.path.join(root, file)
+            entry_name = os.path.relpath(path, pass_store_path)[:-4]
 
-                if raw_pass_content:
-                    processed_pass_content = process_pass(entry_name, raw_pass_content)
-                    processed_pass_rows.append(processed_pass_content)
-                    processed_files += 1
-                else:
-                    print(f"  Failed to read: {entry_name}")
+            print(f"Processing: {entry_name}")
+            raw_pass_content = read_pass(entry_name)
+
+            if raw_pass_content:
+                processed_pass_content = process_pass(entry_name, raw_pass_content)
+                processed_pass_rows.append(processed_pass_content)
+                processed_files += 1
+            else:
+                print(f"  Failed to read: {entry_name}")
 
     print(f"\nSuccessfully processed {processed_files}/{total_files} entries")
 
@@ -243,4 +246,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

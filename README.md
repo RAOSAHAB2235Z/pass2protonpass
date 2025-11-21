@@ -1,6 +1,6 @@
 # pass2protonpass 🔒
 
-**Seamlessly migrate your passwords from Unix [pass](https://www.passwordstore.org/) to [Proton Pass](https://proton.me/pass)**
+**Seamlessly migrate your passwords from [Unix pass](https://www.passwordstore.org/) to [Proton Pass](https://proton.me/pass)**
 
 A lightweight Python migration tool that converts your existing `pass` password store into a Proton Pass compatible CSV format. Perfect for users switching from the Unix command-line password manager to Proton's secure password manager.
 

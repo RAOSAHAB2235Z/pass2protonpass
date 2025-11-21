@@ -4,7 +4,7 @@ import os
 import subprocess
 import getpass
 from dataclasses import dataclass, asdict
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 PASS_STORE="~/.password-store"
 OUTPUT_FILE="~/.proton-migrate/protonpass.csv"
@@ -212,7 +212,7 @@ def count_gpg_files(pass_store_path: str) -> int:
     return total_files
 
 
-def process_all_entries(pass_store_path: str) -> tuple[List[PassContent], int, int]:
+def process_all_entries(pass_store_path: str) -> Tuple[List[PassContent], int, int]:
     """Process all password entries and return results."""
     processed_pass_rows: List[PassContent] = []
     processed_files = 0
